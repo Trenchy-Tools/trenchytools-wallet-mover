@@ -1,27 +1,22 @@
 /**
- * The TrenchyTools API client: the one file that talks to https://api.trenchytools.lol.
+ * The TrenchyTools API client: the one file that talks to https://api.trenchy.tools.
  *
  * Every method names the endpoint it calls, grouped as `sol.*`, `rh.*` and `transfer.*`. The API builds deposit
  * transactions and sends signed ones; this app signs locally with keys from the wallet folder and never talks to an
  * RPC node itself.
  *
+ * Client-safe (no node imports): the server uses it with the key from settings (lib/settings.ts `trenchy()`), the
+ * hosted demo uses the same class in the browser with the visitor's own key (lib/browser/engine.ts). The key is injected
+ * through the constructor; nothing here reads settings.
+ *
  * Copy this file into your own project. It depends on nothing but fetch. Docs for every endpoint:
- * https://api.trenchytools.lol/AGENTS.md and https://trenchytools-docs-production.up.railway.app/openapi.json
+ * https://api.trenchy.tools/AGENTS.md and https://trenchy.tools/openapi.json
  */
-import type { ChainId } from "./chains"
-import type { EvmAccountInfo, EvmDeposit } from "./evm"
-import { effectiveSettings, type Mode } from "./settings"
+import type { ChainId, Mode } from "./chains"
+import { ApiError } from "./core/errors"
+import type { EvmAccountInfo, EvmDeposit } from "./core/evm"
 
-/** Every API error body is `{ error, code, hint?, docs? }`. All of it rides along here; show it verbatim, branch on `code`. */
-export class ApiError extends Error {
-  constructor(message: string, public status: number, public code?: string, public hint?: string, public docs?: string) {
-    super(message)
-    this.name = "ApiError"
-  }
-  toJSON() {
-    return { error: this.message, code: this.code, hint: this.hint, docs: this.docs, status: this.status }
-  }
-}
+export { ApiError }
 
 // ── shapes (apps/api/src/transfer/index.ts) ──────────────────────────────────
 
@@ -147,10 +142,4 @@ export class Trenchy {
     /** GET /api/transfer: your last 50 transfers. */
     list: () => this.get<{ transfers: TransferStatus[] }>("/api/transfer"),
   }
-}
-
-/** The client with the current settings. Cheap: build one per request. */
-export function trenchy(): Trenchy {
-  const { apiUrl, apiKey } = effectiveSettings()
-  return new Trenchy(apiUrl, apiKey)
 }

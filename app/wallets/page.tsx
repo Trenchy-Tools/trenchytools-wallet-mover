@@ -11,7 +11,8 @@ import { Badge, Card, ChainMark } from "@/components/ui/card"
 import { Input, Select } from "@/components/ui/input"
 import { Empty, Mono, Table, TBody, THead } from "@/components/ui/table"
 import { CHAINS, CHAIN_IDS, MODES, ROLES, type ChainId, type Mode, type Role } from "@/lib/chains"
-import { api, errorText, walletKey, type BalanceRow, type MoveRequest, type PlanView, type PublicJob, type TransferVenues, type WalletInfo, type WalletsView } from "@/lib/client"
+import { DEMO, KEYS_HOME } from "@/lib/browser/demo"
+import { api, errorText, rawApi, walletKey, type BalanceRow, type MoveRequest, type PlanView, type PublicJob, type TransferVenues, type WalletInfo, type WalletsView } from "@/lib/client"
 import { cn, fmt } from "@/lib/utils"
 
 const AMOUNT_RE = /[^0-9.]/g
@@ -67,6 +68,13 @@ export default function WalletsPage() {
     } catch (e) { setError(e) }
   }, [loadBalances])
   React.useEffect(() => { void load() }, [load])
+  // demo mode: a backup downloaded from the status strip changes what is usable here
+  React.useEffect(() => {
+    if (!DEMO) return
+    const on = () => void api<WalletsView>("/api/wallets").then(setData).catch(() => null)
+    window.addEventListener("wallets-changed", on)
+    return () => window.removeEventListener("wallets-changed", on)
+  }, [])
   React.useEffect(() => { if (status) { setMode(status.mode); setVenue(status.venue) } }, [status])
   React.useEffect(() => { if (viaExchange && !venues) api<TransferVenues>("/api/transfer/venues").then(setVenues).catch(() => null) }, [viaExchange, venues])
   const onTick = React.useCallback(() => { if (data) void loadBalances(data.wallets) }, [data, loadBalances])
@@ -107,6 +115,16 @@ export default function WalletsPage() {
     const r = await api<{ files: number; restored: string[]; csvAdded: number }>("/api/wallets/rewrite-backups", { method: "POST" })
     return <>{r.files} wallet files; restored {r.restored.length} from wallets.csv; {r.csvAdded} CSV line{r.csvAdded === 1 ? "" : "s"} added.</>
   })
+  // demo mode: the keys live in this browser; the backup is a download (one JSON file, the CSV inside)
+  const doBackup = () => run("backup", async () => {
+    const r = await api<{ count: number; files: string[] }>("/api/wallets/backup", { method: "POST" })
+    return r.count ? <>Backup downloaded: {r.count} wallet{r.count === 1 ? "" : "s"}, now usable · <code className="break-all">{r.files.join(" · ")}</code></> : <>Every wallet is already backed up.</>
+  })
+  const doExportAll = () => run("export-all", async () => {
+    if (!window.confirm("Download every key stored in this browser as one JSON file (with a CSV copy inside)?\n\nAnyone with the file controls the wallets.")) return
+    const r = await api<{ count: number; files: string[] }>("/api/wallets/export-all", { method: "POST" })
+    return <>Exported {r.count} key{r.count === 1 ? "" : "s"} · <code className="break-all">{r.files.join(" · ")}</code></>
+  })
   const setMain = (w: WalletInfo) => run("main", async () => { await api("/api/wallets/main", { json: { chain: w.chain, publicKey: w.publicKey } }) })
   const saveRename = () => {
     if (!rename) return
@@ -128,7 +146,7 @@ export default function WalletsPage() {
     if (!window.confirm(`Export ${list.length} wallet${list.length > 1 ? "s" : ""} as CSV? The file contains the PRIVATE KEYS. Anyone with the file controls the wallets.`)) return
     setBusy("export"); setError(null)
     try {
-      const res = await fetch("/api/wallets/export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallets: list }) })
+      const res = await rawApi("/api/wallets/export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallets: list }) })
       if (!res.ok) throw await res.json()
       const url = URL.createObjectURL(await res.blob())
       const a = Object.assign(document.createElement("a"), { href: url, download: `wallets-export-${new Date().toISOString().slice(0, 10)}.csv` })
@@ -189,8 +207,19 @@ export default function WalletsPage() {
     <div className="flex flex-col gap-4 pb-24">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h1 className="text-lg font-semibold tracking-tight">Wallets</h1>
-        <p className="text-muted-foreground text-xs">Keys are saved to <code className="text-foreground break-all">{data?.dir ?? status?.backupDir ?? "…"}</code> · <button className="underline underline-offset-2 hover:text-foreground" onClick={doRewrite} disabled={busy !== null}>Rewrite backups</button></p>
+        {DEMO ? (
+          <p className="text-muted-foreground text-xs">Keys: {KEYS_HOME} · <button className="underline underline-offset-2 hover:text-foreground" onClick={doBackup} disabled={busy !== null}>{busy === "backup" ? "Downloading…" : "Download backup"}</button> · <button className="underline underline-offset-2 hover:text-foreground" onClick={doExportAll} disabled={busy !== null}>{busy === "export-all" ? "Downloading…" : "Export all keys"}</button></p>
+        ) : (
+          <p className="text-muted-foreground text-xs">Keys are saved to <code className="text-foreground break-all">{data?.dir ?? status?.backupDir ?? "…"}</code> · <button className="underline underline-offset-2 hover:text-foreground" onClick={doRewrite} disabled={busy !== null}>Rewrite backups</button></p>
+        )}
       </div>
+      {!!data?.pending?.length && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm">
+          <span className="font-medium text-red-700 dark:text-red-300">{data.pending.length} wallet{data.pending.length === 1 ? " is" : "s are"} not backed up yet: nothing is paid to or sent from {data.pending.length === 1 ? "it" : "them"} until the key{data.pending.length === 1 ? " is" : "s are"} downloaded.</span>
+          {data.pending.slice(0, 8).map((m) => <Mono key={walletKey(m.chain, m.publicKey)} className="text-xs">{m.label || m.publicKey.slice(0, 8)}</Mono>)}
+          <Button size="xs" className="ml-auto" onClick={doBackup} disabled={busy !== null}>{busy === "backup" ? "Downloading…" : "Download backup"}</Button>
+        </div>
+      )}
 
       {/* toolbar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -218,7 +247,7 @@ export default function WalletsPage() {
         <div className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
           <Input type="password" autoComplete="off" className="flex-1 font-mono" placeholder="base58 secret (Solana) or 0x key (EVM)" value={secret} onChange={(e) => setSecret(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && secret.trim()) doImport() }} />
           <Button onClick={doImport} disabled={busy !== null || !secret.trim()}>{busy === "import" ? "Importing…" : "Import"}</Button>
-          <span className="text-muted-foreground text-xs">A 0x key lands on {filter !== "all" && CHAINS[filter].kind === "evm" ? CHAINS[filter].name : "Robinhood"}; written to the folder like a created one.</span>
+          <span className="text-muted-foreground text-xs">A 0x key lands on {filter !== "all" && CHAINS[filter].kind === "evm" ? CHAINS[filter].name : "Robinhood"}; {DEMO ? "stored in this browser like a created one: download your backup before using it." : "written to the folder like a created one."}</span>
         </div>
       )}
 

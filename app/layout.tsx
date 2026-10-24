@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google"
+import { DemoBanner } from "@/components/demo-banner"
 import { Providers } from "@/components/providers"
 import { StatusStrip } from "@/components/status-strip"
 import { TopBar } from "@/components/top-bar"
@@ -11,7 +12,7 @@ const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], 
 
 export const metadata: Metadata = {
   title: { default: "wallet mover · TrenchyTools", template: "%s · wallet mover" },
-  description: "Move money between many wallets and chains on the TrenchyTools API. Keys are files on your Desktop.",
+  description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Move money between many wallets and chains on the TrenchyTools API, from your browser. Your keys stay in this browser." : "Move money between many wallets and chains on the TrenchyTools API. Keys are files on your Desktop.",
   icons: { icon: "/icon.svg" },
 }
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable}`}>
       <body className="bg-background text-foreground min-h-dvh font-sans antialiased">
         <Providers>
+          <DemoBanner />
           <TopBar />
           <StatusStrip />
           <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">{children}</main>

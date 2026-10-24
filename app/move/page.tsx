@@ -11,9 +11,10 @@ import { Button } from "@/components/ui/button"
 import { Badge, Card, ChainMark } from "@/components/ui/card"
 import { Input, Select } from "@/components/ui/input"
 import { Empty, Mono } from "@/components/ui/table"
+import { DEMO, TAB_NOTE } from "@/lib/browser/demo"
 import { CHAINS, CHAIN_IDS, chainsForAddress, looksLikeAddress, shortAddress, type ChainId } from "@/lib/chains"
 import { api, errorText, walletKey, type BalanceRow, type Endpoint, type MoveRequest, type PlanView, type PublicJob, type WalletInfo, type WalletsView } from "@/lib/client"
-import { SHAPE_TEXT, amountSideOf, maxAmount, onGrid, shapeOf, splitEven, splitUneven, sum } from "@/lib/moves"
+import { SHAPE_TEXT, amountSideOf, maxAmount, onGrid, shapeOf, splitEven, splitUneven, sum } from "@/lib/core/moves"
 import { cn, fmt } from "@/lib/utils"
 
 /** A basket line: a wallet of ours or a pasted address, with the amount typed on it (From rows can be "max"). */
@@ -247,6 +248,7 @@ export default function MovePage() {
                 </span>
               ) : <span className="text-muted-foreground">{planError ?? "…"}</span>}
               {plan && plan.required.length > 0 && <p className="text-muted-foreground mt-1 text-xs">Sources must hold {plan.required.map((r) => `${r.label ?? shortAddress(r.address)} ${fmt(r.needs)} ${CHAINS[r.chain].native}`).join(" · ")} (legs + gas reserve); Run checks that first and stops if one is short.</p>}
+              {DEMO && <p className="text-muted-foreground mt-1 text-xs">{TAB_NOTE}</p>}
             </div>
             <Button onClick={doRun} disabled={!plan || busy || running} title={plan ? `${describe(plan)} · ${plan.route}` : planError ?? ""}><Play /> {running ? "Running…" : busy ? "Starting…" : runLabel}</Button>
           </div>

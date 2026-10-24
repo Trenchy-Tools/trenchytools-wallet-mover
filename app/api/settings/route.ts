@@ -2,8 +2,8 @@
 // PATCH /api/settings  { apiKey?, apiUrl?, gasReserveSol?, gasReserveEth?, route?, mode?, venue? }  (null / "" clears a field)
 import { body, fail, ok } from "@/lib/http"
 import { BACKUP_DIR } from "@/lib/paths"
-import { effectiveSettings, updateSettings, type Settings } from "@/lib/settings"
-import { ApiError, trenchy } from "@/lib/trenchy"
+import { effectiveSettings, trenchy, updateSettings, type Settings } from "@/lib/settings"
+import { ApiError } from "@/lib/trenchy"
 import { listWallets } from "@/lib/wallets"
 
 async function view() {

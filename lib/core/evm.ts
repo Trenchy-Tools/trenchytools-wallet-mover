@@ -1,5 +1,6 @@
 /**
- * EVM signing (Robinhood chain 4663; the same 0x key also owns the address on Ethereum and BNB), local only.
+ * EVM signing (Robinhood chain 4663; the same 0x key also owns the address on Ethereum and BNB), in the process that holds
+ * the key (the server in local mode, the visitor's tab in demo mode). No node imports.
  *
  * There is no RPC here. Everything a signer needs — chain id, pending nonce, fee values — comes from
  * GET /api/rh/account?wallet=…; a plain transfer is {to, value, gas: 21000}; the signed raw bytes go to POST /api/rh/send.

@@ -16,27 +16,22 @@
 import fs from "node:fs"
 import path from "node:path"
 import { CHAINS, isChainId, isRole, ROLES, type ChainId, type Role } from "./chains"
-import { accountFromKey, generateEvm } from "./evm"
+import type { WalletStore } from "./core/env"
+import { NotBackedUpError as BackupRefusal } from "./core/errors"
+import { accountFromKey, generateEvm } from "./core/evm"
+import { generateSol, keypairFromSecret } from "./core/sol"
+import { APP_NAME, CSV_HEADER, KEEP_NOTE, csvLine, newLabel, parseCsvLine, sameAddr, type WalletFile, type WalletInfo } from "./core/wallet-record"
 import { BACKUP_DIR, ensureDirs } from "./paths"
-import { generateSol, keypairFromSecret } from "./sol"
 
-export { ROLES, isRole, type Role }
-export const APP_NAME = "trenchytools-wallet-mover"
-
-export type WalletFile = { publicKey: string; privateKey: string; chain: ChainId; role: Role; label: string; createdAt: string; app: string }
-/** What the UI sees: everything but the secret, plus the file name. */
-export type WalletInfo = Omit<WalletFile, "privateKey"> & { file: string }
+export { APP_NAME, ROLES, isRole, type Role, type WalletFile, type WalletInfo }
 
 const CSV_FILE = path.join(BACKUP_DIR, "wallets.csv")
-const CSV_HEADER = "createdAt,chain,role,label,publicKey,privateKey\n"
 const ADDR_RE = /-([1-9A-HJ-NP-Za-km-z]{32,44}|0x[0-9a-fA-F]{40})\.json$/
-const sameAddr = (a: string, b: string) => (a.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b)
 
-export class NotBackedUpError extends Error {
-  code = "not_backed_up" as const
-  hint = "Run 'Rewrite backups' on the Wallets page, or restore the file from wallets.csv"
-  constructor(public publicKey: string, public chain: ChainId) {
-    super(`Wallet ${publicKey.slice(0, 8)}… (${chain}) has no file in ${BACKUP_DIR}; refusing to pay or use it`)
+/** The backup rule's refusal in local mode: the wallet's file is missing from the folder (409 not_backed_up). */
+export class NotBackedUpError extends BackupRefusal {
+  constructor(publicKey: string, chain: ChainId) {
+    super(publicKey, chain, `Wallet ${publicKey.slice(0, 8)}… (${chain}) has no file in ${BACKUP_DIR}; refusing to pay or use it`, "Run 'Rewrite backups' on the Wallets page, or restore the file from wallets.csv", BACKUP_DIR)
   }
 }
 
@@ -104,7 +99,6 @@ export function secretOf(publicKey: string, chain: ChainId): string {
 }
 
 const safe = (s: string) => (s.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "wallet").slice(0, 40)
-const csvField = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
 
 /**
  * Write one wallet: its JSON file (created exclusively, never overwritten) and its CSV line. Synchronous, and done
@@ -116,13 +110,11 @@ function writeWallet(w: WalletFile): { file: string; existed: boolean } {
   if (existing) return { file: existing, existed: true }
   const stamp = w.createdAt.replace(/[:.]/g, "-") // colons are not allowed in Windows file names
   const file = path.join(BACKUP_DIR, `${stamp}-${w.chain}-${safe(w.role)}-${w.publicKey}.json`)
-  fs.writeFileSync(file, JSON.stringify({ ...w, note: "Keep this file. Anyone with privateKey controls the wallet." }, null, 2), { flag: "wx", mode: 0o600 })
+  fs.writeFileSync(file, JSON.stringify({ ...w, note: KEEP_NOTE }, null, 2), { flag: "wx", mode: 0o600 })
   if (!csvRows().some((r) => r.chain === w.chain && sameAddr(r.publicKey, w.publicKey))) appendCsv(w)
   console.log(`[wallets] ${w.chain} ${w.role} ${w.publicKey.slice(0, 8)}… → ${file}`)
   return { file, existed: false }
 }
-
-const csvLine = (w: WalletFile) => [w.createdAt, w.chain, w.role, csvField(w.label), w.publicKey, w.privateKey].join(",") + "\n"
 
 /** Rewrite wallets.csv in the shared 6-column layout from what it holds (legacy 5-column lines become chain=sol, duplicates collapse). */
 function normalizeCsv(): void {
@@ -137,24 +129,6 @@ function appendCsv(w: WalletFile): void {
   if (!fs.existsSync(CSV_FILE)) fs.writeFileSync(CSV_FILE, CSV_HEADER, { mode: 0o600 })
   else if (!csvHasChainHeader()) normalizeCsv() // an older starter wrote the 5-column layout: upgrade the file first
   fs.appendFileSync(CSV_FILE, csvLine(w))
-}
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = []
-  let cur = ""
-  let q = false
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]
-    if (q) {
-      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++ }
-      else if (c === '"') q = false
-      else cur += c
-    } else if (c === '"') q = true
-    else if (c === ",") { cells.push(cur); cur = "" }
-    else cur += c
-  }
-  cells.push(cur)
-  return cells
 }
 
 const ADDR_SHAPE = /^([1-9A-HJ-NP-Za-km-z]{32,44}|0x[0-9a-fA-F]{40})$/
@@ -197,7 +171,7 @@ export function createWallets(count: number, chain: ChainId, role: Role = "trade
   const out: Array<WalletInfo & { path: string }> = []
   for (let i = 0; i < n; i++) {
     const createdAt = new Date(Date.now() + i).toISOString() // unique stamps, stable sort order
-    const name = label ? (n > 1 ? `${label} ${i + 1}` : label) : `Wallet ${start + i}`
+    const name = newLabel(label, n, i, start)
     const w: WalletFile = { ...generate(chain), chain, role, label: name, createdAt, app: APP_NAME }
     const { file } = writeWallet(w)
     out.push({ ...publicView(w, file), path: file })
@@ -212,7 +186,7 @@ export function renameWallet(publicKey: string, chain: ChainId, patch: { label?:
   if (!w || !file) throw new NotBackedUpError(publicKey, chain)
   const next: WalletFile = { ...w, label: patch.label?.trim() || w.label, role: patch.role ?? w.role }
   const tmp = `${file}.${process.pid}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify({ ...next, note: "Keep this file. Anyone with privateKey controls the wallet." }, null, 2), { mode: 0o600 })
+  fs.writeFileSync(tmp, JSON.stringify({ ...next, note: KEEP_NOTE }, null, 2), { mode: 0o600 })
   fs.renameSync(tmp, file)
   if (fs.existsSync(CSV_FILE)) {
     const rows = csvRows().map((r) => (r.chain === chain && sameAddr(r.publicKey, publicKey) ? { ...r, label: next.label, role: next.role } : r))
@@ -270,7 +244,18 @@ export function exportCsv(selection: Array<{ publicKey: string; chain: ChainId }
   for (const s of selection) {
     const file = findFile(s.publicKey, s.chain)
     const w = file ? readFile(file) : null
-    if (w) out += [w.createdAt, w.chain, w.role, csvField(w.label), w.publicKey, w.privateKey].join(",") + "\n"
+    if (w) out += csvLine(w)
   }
   return out
+}
+
+/** This folder as the store the shared flows use (lib/core/env.ts): plan, run, relay wallets. */
+export const walletStore: WalletStore = {
+  place: "folder",
+  get: getWallet,
+  isOurs: (chain, address) => !!getWallet(address, chain) || missingFiles().some((m) => m.chain === chain && m.publicKey.toLowerCase() === address.toLowerCase()),
+  assertBackedUp,
+  secretOf,
+  createRelay: (chain, label) => createWallets(1, chain, "relay", label)[0],
+  relayKept: { sentence: "The relay wallet's file stays in the folder.", aside: "(its file is in the folder)" },
 }

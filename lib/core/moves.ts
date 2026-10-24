@@ -1,5 +1,5 @@
 /**
- * The desk's arithmetic: shapes, splits and leg planning. Pure functions, safe to import from the browser.
+ * The desk's arithmetic: shapes, splits and leg planning. Pure functions, shared by local mode (the server routes) and demo mode (the browser engine). No node imports.
  *
  *   From  To    Shape         Amounts
  *   1     1     send          one amount, or Max (balance − gas reserve)
@@ -11,8 +11,7 @@
  * The side with more wallets carries the amounts (the launcher's rule): To rows when distributing, From rows otherwise.
  * All splits live on a 0.001 grid and sum exactly to the total. Cross-chain legs always take the exchange route.
  */
-import { CHAINS, type ChainId } from "./chains"
-import type { Mode } from "./settings"
+import { CHAINS, type ChainId, type Mode } from "../chains"
 
 export type Shape = "send" | "distribute" | "consolidate" | "pairwise" | "pool"
 export type Split = "even" | "uneven" | "fixed"

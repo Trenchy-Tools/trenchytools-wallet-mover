@@ -1,7 +1,7 @@
 // GET /api/transfer/routes?from=sol&to=rh&amount=0.5   → GET /api/transfer/routes on the API: quotes, minimums, venue status
 import { isChainId } from "@/lib/chains"
 import { fail, num, ok } from "@/lib/http"
-import { trenchy } from "@/lib/trenchy"
+import { trenchy } from "@/lib/settings"
 
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams

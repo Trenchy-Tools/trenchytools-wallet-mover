@@ -1,7 +1,7 @@
 /**
  * Settings: `_app/wallet-mover/settings.json` in the wallet folder (written by the Settings sheet) over `.env` defaults.
  *   apiKey          TRENCHY_API_KEY
- *   apiUrl          TRENCHY_API_URL      default https://api.trenchytools.lol
+ *   apiUrl          TRENCHY_API_URL      default https://api.trenchy.tools
  *   gasReserveSol   kept in a Solana wallet on "Max"          default 0.001 SOL
  *   gasReserveEth   kept in an EVM wallet on "Max"            default 0.00005 ETH
  *   route / mode / venue   defaults for the Move desk         direct · float · auto
@@ -9,10 +9,11 @@
  *   archived        wallets hidden from the lists ("chain:address", lower-cased); their files stay in the folder
  */
 import { MODES, ROUTES, isChainId, type ChainId, type Mode, type RouteChoice } from "./chains"
+import { DEFAULT_API_URL, DEFAULTS } from "./core/env"
 import { SETTINGS_FILE, readJson, writeJson } from "./paths"
+import { Trenchy } from "./trenchy"
 
-export { MODES, ROUTES, type Mode, type RouteChoice }
-export const DEFAULT_API_URL = "https://api.trenchytools.lol"
+export { DEFAULT_API_URL, MODES, ROUTES, type Mode, type RouteChoice }
 
 export type Settings = {
   apiKey?: string; apiUrl?: string; gasReserveSol?: number; gasReserveEth?: number; route?: RouteChoice; mode?: Mode; venue?: string
@@ -96,11 +97,17 @@ export function effectiveSettings(): Effective {
   return {
     apiUrl: (s.apiUrl || process.env.TRENCHY_API_URL || DEFAULT_API_URL).trim().replace(/\/+$/, ""),
     apiKey: s.apiKey || envKey,
-    gasReserveSol: s.gasReserveSol ?? 0.001,
-    gasReserveEth: s.gasReserveEth ?? 0.00005,
-    route: s.route ?? "direct",
-    mode: s.mode ?? "float",
-    venue: s.venue ?? "auto",
+    gasReserveSol: s.gasReserveSol ?? DEFAULTS.gasReserveSol,
+    gasReserveEth: s.gasReserveEth ?? DEFAULTS.gasReserveEth,
+    route: s.route ?? DEFAULTS.route,
+    mode: s.mode ?? DEFAULTS.mode,
+    venue: s.venue ?? DEFAULTS.venue,
     apiKeyFrom: s.apiKey ? "settings" : envKey ? "env" : "none",
   }
+}
+
+/** The API client with the current settings (lib/trenchy.ts, key injected). Cheap: build one per request. */
+export function trenchy(): Trenchy {
+  const { apiUrl, apiKey } = effectiveSettings()
+  return new Trenchy(apiUrl, apiKey)
 }
