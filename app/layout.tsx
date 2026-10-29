@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google"
 import { DemoBanner } from "@/components/demo-banner"
 import { Providers } from "@/components/providers"
-import { StatusStrip } from "@/components/status-strip"
 import { TopBar } from "@/components/top-bar"
 import "./globals.css"
 
@@ -21,9 +20,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable}`}>
       <body className="bg-background text-foreground min-h-dvh font-sans antialiased">
         <Providers>
-          <DemoBanner />
           <TopBar />
-          <StatusStrip />
+          <DemoBanner />
           <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">{children}</main>
         </Providers>
       </body>

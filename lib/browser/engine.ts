@@ -279,7 +279,7 @@ route("GET", /^\/api\/transfer\/routes$/, async (req) => {
 route("GET", /^\/api\/transfer\/venues$/, async () => ok(await api().transfer.venues()))
 
 // the desk
-route("POST", /^\/api\/move\/plan$/, async (req) => ok(await planFromBody(env(), await body<MoveBody>(req))), 400)
+route("POST", /^\/api\/move\/plan$/, async (req) => { const e = env(); e.api.beginTrace(); const plan = await planFromBody(e, await body<MoveBody>(req)); return ok({ ...plan, calls: e.api.endTrace() }) }, 400)
 route("POST", /^\/api\/move\/preview$/, async (req) => { const e = env(); return ok(await previewPlan(e, await planFromBody(e, await body<MoveBody>(req)))) }, 400)
 route("GET", /^\/api\/move\/run$/, () => {
   const live = [...jobs.values()].map(publicJob)

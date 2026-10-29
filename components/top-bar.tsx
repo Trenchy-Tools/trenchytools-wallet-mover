@@ -5,12 +5,10 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Settings2 } from "lucide-react"
 import { Logo } from "./logo"
+import { MoreMenu } from "./more-menu"
 import { useStatus } from "./providers"
 import { SettingsSheet } from "./settings-sheet"
-import { SiteLinks } from "./site-links"
 import { ThemeToggle } from "./theme-toggle"
-import { Button } from "./ui/button"
-import { Badge } from "./ui/card"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -18,12 +16,20 @@ const NAV = [
   { href: "/move", label: "Move" },
   { href: "/activity", label: "Activity" },
 ]
+const LIVE = "https://mover.trenchy.tools"
+const REPO = "https://github.com/Trenchy-Tools/trenchytools-wallet-mover"
 
-/** logo · Wallets · Move · Activity · (right) API key pill · wallets pill · theme · Settings */
+/**
+ * Seven targets: wordmark · Wallets · Move · Activity · one status dot (opens Settings) · Get an API key · ⋯ menu
+ * (docs, examples, GitHub, theme, Settings). Everything about keys, wallets and folders lives behind the dot.
+ */
 export function TopBar() {
   const path = usePathname()
-  const { status } = useStatus()
+  const { status, error } = useStatus()
   const [open, setOpen] = React.useState(false)
+  const pending = status?.pending ?? 0
+  const tone = !status && !error ? "bg-muted-foreground" : error || (status?.apiKeySet && !status.connected) ? "bg-destructive" : status?.connected && status.wallets > 0 && !pending ? "bg-ok" : "bg-warn"
+  const text = !status && !error ? "checking…" : error ? "app server unreachable" : status?.apiKeySet && !status.connected ? "API key rejected" : !status?.connected ? "no API key yet" : status.wallets === 0 ? "key ok · no wallets yet" : pending ? `${pending} wallet${pending === 1 ? "" : "s"} not backed up` : `key ok · ${status.wallets} wallet${status.wallets === 1 ? "" : "s"}`
   return (
     <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur-md">
       <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-6 px-4 sm:px-6">
@@ -34,13 +40,15 @@ export function TopBar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <SiteLinks current="https://mover.trenchy.tools" repo="https://github.com/Trenchy-Tools/trenchytools-wallet-mover" className="mr-2" />
-          <button onClick={() => setOpen(true)} className="hidden sm:block" title="API key">
-            <Badge tone={status ? (status.connected ? "ok" : status.apiKeySet ? "bad" : "warn") : "muted"}>{status ? (status.connected ? `API key · ${status.keyPrefix ?? "connected"}` : status.apiKeySet ? "API key · not accepted" : "API key · missing") : "API key · …"}</Badge>
+          <button type="button" onClick={() => setOpen(true)} className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs transition-colors" title={`${text}. Click for Settings.`}>
+            <span className={cn("size-2 rounded-full", tone)} />
+            <span className="hidden sm:inline">{text}</span>
           </button>
-          <Link href="/wallets" className="hidden sm:block"><Badge>{status ? `${status.wallets} wallets` : "wallets · …"}</Badge></Link>
-          <ThemeToggle className="hidden sm:flex" />
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}><Settings2 /> Settings</Button>
+          <a href="https://trenchy.tools/docs/api-keys" target="_blank" rel="noreferrer" className="bg-foreground text-background inline-flex h-8 items-center rounded-md px-3 text-sm font-medium whitespace-nowrap transition-opacity hover:opacity-90">Get an API key</a>
+          <MoreMenu current={LIVE} repo={REPO}>
+            <div className="flex items-center justify-between px-2.5 py-1.5 text-sm"><span>Theme</span><ThemeToggle /></div>
+            <button type="button" className="hover:bg-accent flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm" onClick={() => setOpen(true)}><Settings2 className="size-4" /> Settings</button>
+          </MoreMenu>
         </div>
       </div>
       <SettingsSheet open={open} onClose={() => setOpen(false)} />

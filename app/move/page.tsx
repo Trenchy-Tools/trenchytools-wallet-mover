@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { Dices, Play, Search, Star, X } from "lucide-react"
+import { ApiCalls, type ApiCall } from "@/components/api-calls"
 import { ApiErrorBox } from "@/components/api-error"
 import { JobLegs, jobRunning, useJobPolling } from "@/components/legs"
 import { useStatus } from "@/components/providers"
@@ -253,6 +254,12 @@ export default function MovePage() {
             <Button onClick={doRun} disabled={!plan || busy || running} title={plan ? `${describe(plan)} · ${plan.route}` : planError ?? ""}><Play /> {running ? "Running…" : busy ? "Starting…" : runLabel}</Button>
           </div>
           <ApiErrorBox error={error} />
+          {plan ? (
+            <details className="border-t pt-3 text-sm">
+              <summary className="text-muted-foreground hover:text-foreground cursor-pointer select-none">Dry run · the API calls behind this plan{(plan as PlanView & { calls?: ApiCall[] }).calls?.length ? ` (${(plan as PlanView & { calls?: ApiCall[] }).calls!.length})` : ""} ▾</summary>
+              <ApiCalls className="mt-2" calls={(plan as PlanView & { calls?: ApiCall[] }).calls} title="" keysWhere={DEMO ? "this browser" : "this machine"} empty="The plan needed no API call (no balances to read)." />
+            </details>
+          ) : null}
           {job && <div className="border-t pt-3"><JobLegs job={job} onClear={() => setJob(null)} /></div>}
         </Card>
       </div>
