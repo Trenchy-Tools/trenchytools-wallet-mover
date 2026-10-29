@@ -9,7 +9,11 @@ import "./globals.css"
 const sans = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans" })
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono" })
 
+const DESCRIPTION = process.env.NEXT_PUBLIC_DEMO === "1" ? "Move money between many wallets and chains on the TrenchyTools API, from your browser." : "Move money between many wallets and chains on the TrenchyTools API."
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://mover.trenchy.tools"),
+  openGraph: { type: "website", siteName: "TrenchyTools", title: "wallet mover · TrenchyTools", description: DESCRIPTION, images: [{ url: "/og.png", width: 1280, height: 640, alt: "wallet mover on the TrenchyTools API" }] },
+  twitter: { card: "summary_large_image", site: "@trenchytools", title: "wallet mover · TrenchyTools", description: DESCRIPTION, images: ["/og.png"] },
   title: { default: "wallet mover · TrenchyTools", template: "%s · wallet mover" },
   description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Move money between many wallets and chains on the TrenchyTools API, from your browser." : "Move money between many wallets and chains on the TrenchyTools API.",
   icons: { icon: "/icon.svg" },
