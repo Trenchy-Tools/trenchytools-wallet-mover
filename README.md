@@ -1,14 +1,14 @@
 <!-- trenchytools:header -->
 <p align="center"><img src="./.github/social.png" alt="wallet mover" width="100%"></p>
 
-<p align="center"><a href="https://mover.trenchy.tools"><b>Live demo</b></a> · <a href="https://trenchy.tools/docs">Docs</a> · <a href="https://api.trenchy.tools/api/create-api-key">Get an API key</a> · <a href="https://api.trenchy.tools/AGENTS.md">AGENTS.md</a> · <a href="https://api.trenchy.tools/openapi.json">OpenAPI</a> · <a href="https://trenchy.tools/status">Status</a> · <a href="https://t.me/trenchytools">Telegram</a> · <a href="https://x.com/trenchytoolz">X</a></p>
+<p align="center"><a href="https://mover.trenchy.tools"><b>Live demo</b></a> · <a href="https://trenchy.tools/docs">Docs</a> · <a href="https://api.trenchy.tools/api/create-api-key">Get an API key</a> · <a href="https://api.trenchy.tools/AGENTS.md">AGENTS.md</a> · <a href="https://api.trenchy.tools/openapi.json">OpenAPI</a> · <a href="https://trenchy.tools/status">Status</a> · <a href="https://t.me/trenchytools">Telegram</a> · <a href="https://x.com/trenchytools">X</a></p>
 
 # wallet mover
 
 Move money between many wallets and chains on the [TrenchyTools API](https://api.trenchy.tools): create wallets on
 Solana and Robinhood chain, fund them, split, distribute, consolidate, hop through an exchange (same chain or
 cross-chain, optionally through a named venue to break a wallet cluster, or through a privacy-coin leg). One Next.js
-app, one process, keys as files on your Desktop.
+app, one process, keys as files in the repo's `wallets/` folder.
 
 A sibling of `pumpfun-starter` and `pons-starter`: same theme, same scaffold, **same wallet folder**. A wallet made
 here is usable there at once.
@@ -20,7 +20,7 @@ here is usable there at once.
 ## Tutorial: your first move in 5 steps
 
 1. **Get a key** (one call, no account): `curl "https://api.trenchy.tools/api/create-api-key?label=me"` → paste the `apiKey` into `.env` as `TRENCHY_API_KEY`, then `npm install && npm run dev` and open http://localhost:3000.
-2. **Make two wallets.** Wallets → **+ New wallet** twice (Solana). The first one becomes ★; every key is written to `~/Desktop/trenchytools-wallets` before the wallet shows up. Send ★ a little SOL from your own wallet.
+2. **Make two wallets.** Wallets → **+ New wallet** twice (Solana). The first one becomes ★; every key is written to `./wallets` (inside the clone, git-ignored) before the wallet shows up. Send ★ a little SOL from your own wallet.
 3. **Open the desk.** Move → press **From** on ★ and **To** on the other wallet (or paste any address into To).
 4. **Set the amounts.** Type an amount, press **Max**, or with several To wallets use **Split evenly**. Pick the route: **Direct**, or **Exchange** (a hop through an exchange, same chain or cross-chain, so the wallets are not linked on-chain).
 5. **Run.** One button; every leg shows its live status and receipt. **Activity** keeps the history. Wallets made here are usable in the pump.fun and pons launchers at once: all three share the same folder.
@@ -46,8 +46,7 @@ wallet folder, never in the repo.
 
 ```
 WALLET_BACKUP_DIR                  when set
-~/Desktop/trenchytools-wallets     when a Desktop folder exists
-~/trenchytools-wallets             otherwise
+./wallets                          otherwise: inside the cloned repo, git-ignored
 ```
 
 That folder **is** the wallet store. One JSON per wallet, created before the response that announces it returns:
@@ -161,7 +160,7 @@ along with `lib/core/sol.ts` (Solana signer + deposit check) and `lib/core/evm.t
 Paste this into your coding agent together with https://api.trenchy.tools/AGENTS.md:
 
 > Build a wallet mover on the TrenchyTools API like `demos/wallet-mover`: wallets are JSON files in
-> `~/Desktop/trenchytools-wallets` written before use, never pay a wallet without its file (409 `not_backed_up`),
+> `./wallets` (inside the clone, git-ignored) written before use, never pay a wallet without its file (409 `not_backed_up`),
 > preflight balances with `GET /api/sol/balances` / `GET /api/rh/balances`, create legs with `POST /api/transfer` or
 > `/batch`, verify the unsigned deposit (payer, destination, exact amount) before signing, send with
 > `POST /api/sol/send` / `POST /api/rh/send`, record with `POST /api/transfer/:id/sent`, poll `GET /api/transfer/:id`
@@ -228,4 +227,4 @@ lib/browser/ demo mode only: demo.ts (flag + appFetch)  engine.ts (the /api rout
 proxy.ts    demo mode: every /api route → 404 demo_mode
 ```
 
-MIT. Support: https://t.me/trenchytools · X @trenchytoolz.
+MIT. Support: https://t.me/trenchytools · X @trenchytools.

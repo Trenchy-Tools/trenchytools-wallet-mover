@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
-  "description": "Move money between many wallets and chains on the TrenchyTools API: create, split, distribute, consolidate, hop through an exchange. One Next.js app, keys as files on your Desktop.",
+  "description": "Move money between many wallets and chains on the TrenchyTools API: create, split, distribute, consolidate, hop through an exchange. One Next.js app, keys as files in the repo's wallets/ folder.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

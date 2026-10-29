@@ -12,7 +12,7 @@ const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], 
 
 export const metadata: Metadata = {
   title: { default: "wallet mover · TrenchyTools", template: "%s · wallet mover" },
-  description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Move money between many wallets and chains on the TrenchyTools API, from your browser. Your keys stay in this browser." : "Move money between many wallets and chains on the TrenchyTools API. Keys are files on your Desktop.",
+  description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Move money between many wallets and chains on the TrenchyTools API, from your browser. Your keys stay in this browser." : "Move money between many wallets and chains on the TrenchyTools API. Keys are files in the repo.",
   icons: { icon: "/icon.svg" },
 }
 
