@@ -7,6 +7,7 @@ import { Settings2 } from "lucide-react"
 import { Logo } from "./logo"
 import { useStatus } from "./providers"
 import { SettingsSheet } from "./settings-sheet"
+import { SiteLinks } from "./site-links"
 import { ThemeToggle } from "./theme-toggle"
 import { Button } from "./ui/button"
 import { Badge } from "./ui/card"
@@ -33,6 +34,7 @@ export function TopBar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <SiteLinks current="https://mover.trenchy.tools" repo="https://github.com/Trenchy-Tools/trenchytools-wallet-mover" className="mr-2" />
           <button onClick={() => setOpen(true)} className="hidden sm:block" title="API key">
             <Badge tone={status ? (status.connected ? "ok" : status.apiKeySet ? "bad" : "warn") : "muted"}>{status ? (status.connected ? `API key · ${status.keyPrefix ?? "connected"}` : status.apiKeySet ? "API key · not accepted" : "API key · missing") : "API key · …"}</Badge>
           </button>

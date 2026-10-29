@@ -13,10 +13,22 @@ app, one process, keys as files on your Desktop.
 A sibling of `pumpfun-starter` and `pons-starter`: same theme, same scaffold, **same wallet folder**. A wallet made
 here is usable there at once.
 
+> ### ⚡ Start here
+> **Website:** [trenchy.tools](https://trenchy.tools) · **Docs:** [trenchy.tools/docs](https://trenchy.tools/docs) · **All examples:** [trenchy.tools/docs/examples](https://trenchy.tools/docs/examples) · **Code:** [github.com/Trenchy-Tools](https://github.com/Trenchy-Tools)
+> **Try it without installing:** [mover.trenchy.tools](https://mover.trenchy.tools) (wallets stay in your browser; download the backup before funding anything)
+
+## Tutorial: your first move in 5 steps
+
+1. **Get a key** (one call, no account): `curl "https://api.trenchy.tools/api/create-api-key?label=me"` → paste the `apiKey` into `.env` as `TRENCHY_API_KEY`, then `npm install && npm run dev` and open http://localhost:3000.
+2. **Make two wallets.** Wallets → **+ New wallet** twice (Solana). The first one becomes ★; every key is written to `~/Desktop/trenchytools-wallets` before the wallet shows up. Send ★ a little SOL from your own wallet.
+3. **Open the desk.** Move → press **From** on ★ and **To** on the other wallet (or paste any address into To).
+4. **Set the amounts.** Type an amount, press **Max**, or with several To wallets use **Split evenly**. Pick the route: **Direct**, or **Exchange** (a hop through an exchange, same chain or cross-chain, so the wallets are not linked on-chain).
+5. **Run.** One button; every leg shows its live status and receipt. **Activity** keeps the history. Wallets made here are usable in the pump.fun and pons launchers at once: all three share the same folder.
+
 ## 5-minute start
 
 ```bash
-cd demos/wallet-mover
+git clone https://github.com/Trenchy-Tools/trenchytools-wallet-mover && cd trenchytools-wallet-mover
 npm install
 cp .env.example .env
 curl "https://api.trenchy.tools/api/create-api-key?label=wallet-mover"   # → { "apiKey": "…" }; paste it into .env as TRENCHY_API_KEY
