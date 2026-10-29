@@ -257,7 +257,7 @@ export default function MovePage() {
           {plan ? (
             <details className="border-t pt-3 text-sm">
               <summary className="text-muted-foreground hover:text-foreground cursor-pointer select-none">Dry run · the API calls behind this plan{(plan as PlanView & { calls?: ApiCall[] }).calls?.length ? ` (${(plan as PlanView & { calls?: ApiCall[] }).calls!.length})` : ""} ▾</summary>
-              <ApiCalls className="mt-2" calls={(plan as PlanView & { calls?: ApiCall[] }).calls} title="" keysWhere={DEMO ? "this browser" : "this machine"} empty="The plan needed no API call (no balances to read)." />
+              <ApiCalls className="mt-2" calls={(plan as PlanView & { calls?: ApiCall[] }).calls} title="" empty="The plan needed no API call (no balances to read)." />
             </details>
           ) : null}
           {job && <div className="border-t pt-3"><JobLegs job={job} onClear={() => setJob(null)} /></div>}

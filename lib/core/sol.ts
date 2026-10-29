@@ -1,6 +1,6 @@
 /**
  * Solana signing, in the process that holds the key: the server in local mode (keys from the wallet folder), the visitor's
- * tab in demo mode (keys from lib/browser/keystore.ts). Keys never leave it. No node imports.
+ * tab in demo mode (keys from lib/browser/keystore.ts). No node imports.
  *
  *   - direct legs:   build a SystemProgram transfer with a blockhash from GET /api/sol/blockhash, sign, POST /api/sol/send
  *   - exchange legs: the API hands back an unsigned v0 deposit transaction; verifySolDeposit() checks it is exactly
