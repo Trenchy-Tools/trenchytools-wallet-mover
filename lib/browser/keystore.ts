@@ -102,7 +102,11 @@ export function createKeystore(o: { prefix: string; app: string; fileTag: string
     const at = b[idOf(r.chain, r.publicKey)] ?? null
     return { ...rest, backedUp: !!at, backedUpAt: at }
   }
-  const record = (publicKey: string, chain: ChainId): KeyRecord | null => records().find((r) => r.chain === chain && sameAddr(r.publicKey, publicKey)) ?? null
+  /** (publicKey, chain), else (EVM) the same address saved for another EVM chain: one 0x key owns it on every EVM chain */
+  const record = (publicKey: string, chain: ChainId): KeyRecord | null => {
+    const all = records()
+    return all.find((r) => r.chain === chain && sameAddr(r.publicKey, publicKey)) ?? (CHAINS[chain].kind === "evm" ? all.find((r) => CHAINS[r.chain].kind === "evm" && sameAddr(r.publicKey, publicKey)) ?? null : null)
+  }
 
   /** Every wallet stored here (archived ones too: the pages filter them, as in local mode), oldest first. */
   const list = (): KeyView[] => { const b = backedUpMap(); return records().map((r) => view(r, b)) }
@@ -156,7 +160,7 @@ export function createKeystore(o: { prefix: string; app: string; fileTag: string
   // ── the backup rule ──
 
   const missing = (publicKey: string, chain: ChainId) => new NotBackedUpError(publicKey, chain, `Wallet ${publicKey.slice(0, 8)}… (${chain}) is not in this browser; refusing to pay or use it`, "Import its key on the Wallets page first.")
-  const isBackedUp = (publicKey: string, chain: ChainId) => !!backedUpMap()[idOf(chain, publicKey)]
+  const isBackedUp = (publicKey: string, chain: ChainId) => { const r = record(publicKey, chain); return !!r && !!backedUpMap()[idOf(r.chain, r.publicKey)] }
 
   /** The gate: call before any leg pays a wallet of ours, and before a wallet's key signs anything. */
   function assertBackedUp(publicKey: string, chain: ChainId): void {

@@ -61,6 +61,12 @@ function findFile(publicKey: string, chain: ChainId): string | null {
     const w = readFile(path.join(BACKUP_DIR, name))
     if (w && sameAddr(w.publicKey, publicKey) && w.chain === chain) return path.join(BACKUP_DIR, name)
   }
+  // one 0x key owns the address on every EVM chain: a wallet saved for another EVM chain is the same wallet
+  if (CHAINS[chain].kind === "evm") for (const name of fs.readdirSync(BACKUP_DIR)) {
+    if (!name.toLowerCase().endsWith(`-${publicKey.toLowerCase()}.json`)) continue
+    const w = readFile(path.join(BACKUP_DIR, name))
+    if (w && sameAddr(w.publicKey, publicKey) && CHAINS[w.chain].kind === "evm") return path.join(BACKUP_DIR, name)
+  }
   return null
 }
 

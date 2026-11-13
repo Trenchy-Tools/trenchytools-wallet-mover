@@ -104,6 +104,32 @@ export class Trenchy {
   me() { return this.get<{ keyPrefix?: string; usage30d?: unknown[] }>("/api/me") }
 
   // ── Solana ──────────────────────────────────────────────────────────────
+  /** GET /api/eth|bnb/balances?wallets=…: the native coin of Ethereum or BNB Chain for up to 100 wallets per call. */
+  /** One EVM chain's endpoints (/api/rh, /api/eth, /api/base, /api/bnb, /api/arc, /api/elysium), under one shape. */
+  evm(chain: ChainId) {
+    const p = `/api/${chain}`
+    return {
+      /** GET /account: chain id, pending nonce, EIP-1559 fees (a gasPrice-only chain: both = gasPrice), balance, the chain's plain-transfer gas. */
+      account: async (wallet: string): Promise<EvmAccountInfo> => {
+        const a = await this.get<EvmAccountInfo & Record<string, string | number>>(`${p}/account?wallet=${wallet}`)
+        return { ...a, balanceEth: String(a.balanceEth ?? a.balanceBnb ?? a.balanceHype ?? a.balanceUsdc ?? a.balance ?? "0"), maxFeePerGas: String(a.maxFeePerGas ?? a.gasPrice), maxPriorityFeePerGas: String(a.maxPriorityFeePerGas ?? (a.maxFeePerGas ? "0" : a.gasPrice)), transferGas: String(a.transferGas ?? "21000") }
+      },
+      /** POST /send { transaction: "0x…signed raw" } → { hash }. */
+      send: (raw: string) => this.post<{ hash: string }>(`${p}/send`, { transaction: raw }),
+      /** GET /tx/:hash: success | reverted | pending_or_unknown. */
+      tx: (hash: string) => this.get<{ hash: string; status: string; block?: number }>(`${p}/tx/${encodeURIComponent(hash)}`),
+    }
+  }
+
+  async evmBalances(chain: ChainId, wallets: string[]): Promise<Array<{ wallet: string; amount: number }>> {
+    const out: Array<{ wallet: string; amount: number }> = []
+    for (let i = 0; i < wallets.length; i += 100) {
+      const r = await this.get<{ wallets: Array<{ wallet: string; native?: string; eth?: string; bnb?: string; hype?: string; usdc?: string }> }>(`/api/${chain}/balances?wallets=${wallets.slice(i, i + 100).join(",")}`)
+      out.push(...r.wallets.map((w) => ({ wallet: w.wallet, amount: Number(w.native ?? w.eth ?? w.bnb ?? w.hype ?? w.usdc ?? 0) })))
+    }
+    return out
+  }
+
   sol = {
     /** GET /api/sol/balances?wallets=…: SOL for up to 100 wallets per call. */
     balances: async (wallets: string[]): Promise<Array<{ wallet: string; sol: number }>> => {

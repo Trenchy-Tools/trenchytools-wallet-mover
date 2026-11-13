@@ -21,7 +21,7 @@ export const DEMO = process.env.NEXT_PUBLIC_DEMO === "1"
 /** Where visitors clone the app to run it on their own machine. */
 export const REPO_URL = "https://github.com/Trenchy-Tools/trenchytools-wallet-mover"
 /** The API the demo talks to, straight from the browser (the CSP in next.config.ts allows exactly this host). */
-export const DEMO_API_URL = "https://api.trenchy.tools"
+export const DEMO_API_URL = (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_TRENCHY_API_URL) || "https://api.trenchy.tools"
 /** The label of the per-visitor key: GET /api/create-api-key?label=demo-mover */
 export const DEMO_KEY_LABEL = "demo-mover"
 /** localStorage namespace: every key this app writes starts with it. */
@@ -43,6 +43,14 @@ export async function appFetch(path: string, init: RequestInit = {}): Promise<Re
   if (!DEMO) return fetch(path, init)
   const { handle } = await loadEngine()
   return handle(new Request(new URL(path, window.location.origin), init))
+}
+
+export type EventSourceLike = { onopen: (() => void) | null; onmessage: ((m: { data: string }) => void) | null; onerror: (() => void) | null; close: () => void }
+
+/** The shared lib/api.ts `subscribe` needs this; the mover follows its moves by polling, so demo mode has no streams. */
+export function appEvents(path: string): EventSourceLike {
+  if (!DEMO) return new EventSource(path) as unknown as EventSourceLike
+  return { onopen: null, onmessage: null, onerror: null, close: () => {} }
 }
 
 /** Warm the engine early (demo mode): the visitor's key is created and interrupted moves are marked as soon as a page opens. */

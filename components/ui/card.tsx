@@ -1,42 +1,28 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/cn"
 
-export function Card({ className, ...props }: React.ComponentProps<"section">) {
-  return <section data-slot="card" className={cn("bg-card text-card-foreground rounded-xl border", className)} {...props} />
+export function Card({ className, ...props }: React.ComponentProps<"div">) {
+  return <div data-slot="card" className={cn("bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-5 shadow-xs", className)} {...props} />
 }
 
-export function CardHeader({ title, description, actions, className }: { title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode; className?: string }) {
-  return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3", className)}>
-      <div className="min-w-0">
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-        {description && <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </header>
-  )
+export function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return <div className={cn("flex flex-col gap-1", className)} {...props} />
 }
 
-export function CardBody({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("px-4 py-3", className)} {...props} />
+export function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
+  return <h2 className={cn("text-base leading-none font-semibold tracking-tight", className)} {...props} />
 }
 
-export function Badge({ className, tone = "muted", ...props }: React.ComponentProps<"span"> & { tone?: "muted" | "ok" | "warn" | "bad" | "info" }) {
+export function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
+  return <p className={cn("text-muted-foreground text-sm", className)} {...props} />
+}
+
+export function Pill({ className, tone = "muted", ...props }: React.ComponentProps<"span"> & { tone?: "muted" | "ok" | "warn" | "bad" }) {
   const tones = {
     muted: "bg-muted text-muted-foreground",
-    ok: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-    warn: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-    bad: "bg-red-500/15 text-red-700 dark:text-red-300",
-    info: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+    ok: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    warn: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    bad: "bg-destructive/10 text-destructive",
   }
-  return <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium whitespace-nowrap", tones[tone], className)} {...props} />
+  return <span className={cn("inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap", tones[tone], className)} {...props} />
 }
-
-/** A chain mark: SOL · RH · ETH · BNB. */
-export function ChainMark({ chain, className }: { chain: string; className?: string }) {
-  const marks: Record<string, string> = { sol: "SOL", rh: "RH", eth: "ETH", bnb: "BNB" }
-  return <span className={cn("bg-secondary text-secondary-foreground inline-flex h-5 min-w-9 items-center justify-center rounded px-1.5 font-mono text-[10px] font-semibold tracking-wide", className)}>{marks[chain] ?? chain.toUpperCase()}</span>
-}
-
-export const statusTone = (s: string): "muted" | "ok" | "warn" | "bad" | "info" =>
-  ["completed", "confirmed"].includes(s) ? "ok" : ["failed", "expired", "refunded", "cancelled", "refused"].includes(s) ? "bad" : ["stuck"].includes(s) ? "warn" : ["planned"].includes(s) ? "muted" : "info"

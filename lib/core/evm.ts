@@ -9,6 +9,8 @@ import { formatEther, getAddress, isAddress, parseEther, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts"
 
 export const TRANSFER_GAS = 21000n
+/** the most a plain transfer may ask for (Robinhood's L1-fee-in-gas transfers measure ~1.6 M) */
+export const MAX_TRANSFER_GAS = 4_000_000n
 
 /** What GET /api/rh/account answers. */
 export type EvmAccountInfo = { wallet: string; chainId: number; nonce: number; pendingNonce: number; balanceEth: string; block: number; gasPrice: string; maxFeePerGas: string; maxPriorityFeePerGas: string; transferGas: string }
@@ -45,7 +47,8 @@ export function verifyEvmDeposit(tx: EvmDeposit, from: string, depositAddress: s
   if (!sameEvmAddress(tx.from, from)) throw new Error("deposit transaction is not sent from our wallet")
   if (!sameEvmAddress(tx.to, depositAddress)) throw new Error("deposit transaction does not send to this transfer's deposit address")
   if (BigInt(tx.value) !== expectedWei) throw new Error(`deposit transaction moves ${formatEther(BigInt(tx.value))} ETH, expected ${formatEther(expectedWei)}`)
-  if (BigInt(tx.gas) !== TRANSFER_GAS) throw new Error(`deposit transaction asks for ${tx.gas} gas, expected 21000`)
+  // a plain transfer: 21 000 on most chains, more where the L1 fee is folded into gas (Robinhood ~1.6 M, Elysium 200 k)
+  if (BigInt(tx.gas) < TRANSFER_GAS || BigInt(tx.gas) > MAX_TRANSFER_GAS) throw new Error(`deposit transaction asks for ${tx.gas} gas, outside a plain transfer's ${TRANSFER_GAS}–${MAX_TRANSFER_GAS}`)
   if (tx.data && tx.data !== "0x") throw new Error("deposit transaction carries calldata; a plain transfer has none")
 }
 
@@ -53,13 +56,13 @@ export function verifyEvmDeposit(tx: EvmDeposit, from: string, depositAddress: s
  * Sign a plain transfer {to, value, gas: 21000} with the account data from GET /api/rh/account. `nonce` is
  * pendingNonce (+1 per transaction already sent in a row from this wallet). Returns the raw bytes for POST /api/rh/send.
  */
-export async function signEvmTransfer(account: PrivateKeyAccount, p: { chainId: number; nonce: number; to: string; valueWei: bigint; maxFeePerGas: string; maxPriorityFeePerGas: string }): Promise<Hex> {
+export async function signEvmTransfer(account: PrivateKeyAccount, p: { chainId: number; nonce: number; to: string; valueWei: bigint; maxFeePerGas: string; maxPriorityFeePerGas: string; gas?: bigint }): Promise<Hex> {
   return account.signTransaction({
     chainId: p.chainId,
     nonce: p.nonce,
     to: getAddress(p.to),
     value: p.valueWei,
-    gas: TRANSFER_GAS,
+    gas: p.gas ?? TRANSFER_GAS,
     maxFeePerGas: BigInt(p.maxFeePerGas),
     maxPriorityFeePerGas: BigInt(p.maxPriorityFeePerGas),
     type: "eip1559",

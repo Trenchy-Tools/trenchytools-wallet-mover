@@ -16,7 +16,7 @@
  *
  * Every leg is written to the ledger (RunEnv.ledger) as it moves.
  */
-import { CHAINS, shortAddress, type ChainId } from "../chains"
+import { CHAINS, CHAIN_IDS, shortAddress, type ChainId } from "../chains"
 import { ApiError, isLegError, transferDone, type DepositTx, type TransferCreated, type TransferHelp, type TransferStatus, type Trenchy } from "../trenchy"
 import { reserveOf, type Env, type WalletStore } from "./env"
 import { accountFromKey, signEvmTransfer, toWei, verifyEvmDeposit, type EvmAccountInfo } from "./evm"
@@ -159,6 +159,10 @@ export async function balancesFor(api: Trenchy, items: Array<{ chain: ChainId; a
   const rh = [...new Set(items.filter((i) => i.chain === "rh").map((i) => i.address))]
   if (sol.length) for (const b of await api.sol.balances(sol)) out.set(key("sol", b.wallet), b.sol)
   if (rh.length) for (const b of await api.rh.balances(rh)) out.set(key("rh", b.wallet), b.eth)
+  for (const c of CHAIN_IDS.filter((x) => x !== "sol" && x !== "rh")) {
+    const list = [...new Set(items.filter((i) => i.chain === c).map((i) => i.address))]
+    if (list.length) for (const b of await api.evmBalances(c, list).catch(() => [])) out.set(key(c, b.wallet), b.amount)
+  }
   for (const i of items) if (!out.has(key(i.chain, i.address))) out.set(key(i.chain, i.address), CHAINS[i.chain].balances ? 0 : null)
   return out
 }
@@ -278,10 +282,10 @@ async function runPhase(env: RunEnv, job: Job, plan: MovePlan, phase: 1 | 2) {
   await follow(env, job, legs.filter((l) => l.route === "exchange" && l.status === "sent"))
 }
 
-/** GET /api/rh/account once per wallet; then pendingNonce + 1 per transaction sent in a row. */
-async function evmAccount(api: Trenchy, nonces: Map<string, EvmAccountInfo & { next: number }>, wallet: string) {
-  const k = wallet.toLowerCase()
-  if (!nonces.has(k)) { const a = await api.rh.account(wallet); nonces.set(k, { ...a, next: a.pendingNonce }) }
+/** GET /api/<chain>/account once per wallet and chain; then pendingNonce + 1 per transaction sent in a row. */
+async function evmAccount(api: Trenchy, nonces: Map<string, EvmAccountInfo & { next: number }>, chain: ChainId, wallet: string) {
+  const k = `${chain}:${wallet.toLowerCase()}`
+  if (!nonces.has(k)) { const a = await api.evm(chain).account(wallet); nonces.set(k, { ...a, next: a.pendingNonce }) }
   return nonces.get(k)!
 }
 
@@ -299,9 +303,9 @@ async function signAndSend(env: RunEnv, job: Job, leg: LegState, nonces: Map<str
       const signed = signSol(tx, kp)
       hash = (await api.sol.send(signed.base64, false)).signature                        // POST /api/sol/send (simulated first)
     } else {
-      const acct = await evmAccount(api, nonces, leg.from.address)                       // GET /api/rh/account
-      const raw = await signEvmTransfer(accountFromKey(secret), { chainId: acct.chainId, nonce: acct.next++, to: leg.to.address, valueWei: toWei(leg.amount), maxFeePerGas: acct.maxFeePerGas, maxPriorityFeePerGas: acct.maxPriorityFeePerGas })
-      hash = (await api.rh.send(raw)).hash                                               // POST /api/rh/send
+      const acct = await evmAccount(api, nonces, leg.from.chain, leg.from.address)       // GET /api/<chain>/account
+      const raw = await signEvmTransfer(accountFromKey(secret), { chainId: acct.chainId, nonce: acct.next++, to: leg.to.address, valueWei: toWei(leg.amount), maxFeePerGas: acct.maxFeePerGas, maxPriorityFeePerGas: acct.maxPriorityFeePerGas, gas: BigInt(acct.transferGas || "21000") })
+      hash = (await api.evm(leg.from.chain).send(raw)).hash                              // POST /api/<chain>/send
     }
     touch(env, job, leg, { status: "sent", depositHash: hash })
     if (leg.transferId) await api.transfer.sent(leg.transferId, hash).catch((e) => log(env, job, `/sent for ${leg.transferId}: ${msg(e)}`)) // POST /api/transfer/:id/sent
@@ -327,9 +331,9 @@ async function signAndSend(env: RunEnv, job: Job, leg: LegState, nonces: Map<str
   } else {
     if (tx.encoding !== "evm" || !tx.evm) throw new Error("the order carries no EVM deposit transaction")
     verifyEvmDeposit(tx.evm, leg.from.address, leg.depositAddress!, toWei(leg.depositAmount!), chain.chainId!)
-    const acct = await evmAccount(api, nonces, leg.from.address)                         // GET /api/rh/account
-    const raw = await signEvmTransfer(accountFromKey(secret), { chainId: tx.evm.chainId, nonce: acct.next++, to: tx.evm.to, valueWei: BigInt(tx.evm.value), maxFeePerGas: acct.maxFeePerGas, maxPriorityFeePerGas: acct.maxPriorityFeePerGas })
-    hash = (await api.rh.send(raw)).hash                                                 // POST /api/rh/send
+    const acct = await evmAccount(api, nonces, leg.from.chain, leg.from.address)         // GET /api/<chain>/account
+    const raw = await signEvmTransfer(accountFromKey(secret), { chainId: tx.evm.chainId, nonce: acct.next++, to: tx.evm.to, valueWei: BigInt(tx.evm.value), maxFeePerGas: acct.maxFeePerGas, maxPriorityFeePerGas: acct.maxPriorityFeePerGas, gas: BigInt(tx.evm.gas) })
+    hash = (await api.evm(leg.from.chain).send(raw)).hash                                // POST /api/<chain>/send
   }
   touch(env, job, leg, { status: "sent", depositHash: hash })
   await api.transfer.sent(leg.transferId!, hash).catch((e) => log(env, job, `/sent for ${leg.transferId}: ${msg(e)}`)) // POST /api/transfer/:id/sent
@@ -346,7 +350,7 @@ async function confirmDirect(env: RunEnv, job: Job, leg: LegState, hash: string)
       if (s?.err) throw new Error(`transaction failed on chain: ${JSON.stringify(s.err)}`)
       if (s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized") return touch(env, job, leg, { status: "confirmed", payoutHash: hash })
     } else {
-      const s = await api.rh.tx(hash).catch(() => null)
+      const s = await api.evm(leg.from.chain).tx(hash).catch(() => null)
       if (s?.status === "reverted") throw new Error("transaction reverted on chain")
       if (s?.status === "success") return touch(env, job, leg, { status: "confirmed", payoutHash: hash })
     }

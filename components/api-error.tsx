@@ -1,19 +1,25 @@
-import { isClientError } from "@/lib/client"
+"use client"
 
-/** Every API error exactly as returned: message · code · hint · docs link. */
-export function ApiErrorBox({ error, className = "" }: { error: unknown; className?: string }) {
+import { ExternalLink } from "lucide-react"
+import type { ApiErrorBody } from "@/lib/client"
+import { cn } from "@/lib/cn"
+
+/** An API error exactly as returned: message · code · hint · docs link. */
+export function ApiError({ error, className }: { error: ApiErrorBody | null | undefined; className?: string }) {
   if (!error) return null
-  const e = isClientError(error) ? error : { error: error instanceof Error ? error.message : String(error), status: 0 }
   return (
-    <div role="alert" className={`rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm ${className}`}>
-      <p className="text-red-700 dark:text-red-300">{e.error}</p>
-      <p className="text-muted-foreground mt-1 flex flex-wrap gap-x-3 text-xs">
-        {e.code && <span className="font-mono">{e.code}</span>}
-        {e.status ? <span>HTTP {e.status}</span> : null}
-        {e.hint && <span>{e.hint}</span>}
-        {e.dir && <span className="font-mono break-all">{e.dir}</span>}
-        {e.docs && <a href={e.docs} target="_blank" rel="noreferrer" className="underline underline-offset-2">docs</a>}
-      </p>
+    <div role="alert" className={cn("border-destructive/40 bg-destructive/5 flex flex-col gap-1 rounded-lg border px-3 py-2 text-sm", className)}>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-destructive font-medium">{error.error}</span>
+        {error.code && <code className="text-muted-foreground text-xs">{error.code}</code>}
+        {error.status ? <span className="text-muted-foreground text-xs">HTTP {error.status}</span> : null}
+      </div>
+      {error.hint && <div className="text-muted-foreground">{error.hint}</div>}
+      {error.docs && (
+        <a href={error.docs} target="_blank" rel="noreferrer" className="text-foreground inline-flex items-center gap-1 text-xs underline underline-offset-4">
+          {error.docs} <ExternalLink className="size-3" />
+        </a>
+      )}
     </div>
   )
 }

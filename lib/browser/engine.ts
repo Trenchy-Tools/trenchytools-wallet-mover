@@ -18,7 +18,7 @@
  *
  * Loaded only in demo mode (a dynamic import in demo.ts).
  */
-import { MODES, ROUTES, isChainId, isRole, type ChainId, type Mode, type RouteChoice } from "../chains"
+import { MODES, ROUTES, isChainId, isRole, type ChainId, type Mode, type RouteChoice, CHAIN_IDS } from "../chains"
 import { DEFAULTS, type Env, type MoveSettings, type WalletStore } from "../core/env"
 import { coded, errorBody } from "../core/errors"
 import { planFromBody, previewPlan, type MoveBody } from "../core/plan-body"
@@ -177,7 +177,7 @@ route("GET", /^\/api\/wallets$/, (req) => {
 })
 route("POST", /^\/api\/wallets$/, async (req) => {
   const b = await body<{ count: number; chain: string; role: string; label: string }>(req)
-  if (!isChainId(b.chain)) return bad("chain must be sol, rh, eth or bnb")
+  if (!isChainId(b.chain)) return bad(`chain must be one of ${CHAIN_IDS.join(", ")}`)
   const wallets = createWallets(Number(b.count) || 1, b.chain, isRole(b.role) ? b.role : "trader", str(b.label) || undefined)
   let starred: string | null = null
   if (!ks.main()[b.chain] && wallets[0]) { ks.setMain(b.chain, wallets[0].publicKey); starred = wallets[0].publicKey }
@@ -185,7 +185,7 @@ route("POST", /^\/api\/wallets$/, async (req) => {
 })
 route("POST", /^\/api\/wallets\/import$/, async (req) => {
   const b = await body<{ secret: string; chain: string; role: string; label: string }>(req)
-  if (!isChainId(b.chain)) return bad("chain must be sol, rh, eth or bnb")
+  if (!isChainId(b.chain)) return bad(`chain must be one of ${CHAIN_IDS.join(", ")}`)
   if (!str(b.secret)) return bad("secret is required")
   const k = parseSecret(b.chain, str(b.secret))
   const { wallet, existed } = ks.add({ ...k, chain: b.chain, role: isRole(b.role) ? b.role : "trader", label: str(b.label) || "imported", createdAt: new Date().toISOString(), app: APP_NAME })
@@ -247,9 +247,33 @@ async function settingsView() {
     apiUrl: DEMO_API_URL, apiKeySet: !!key, apiKeyFrom: "browser", connected, keyPrefix: keyPrefix ?? (key ? maskKey(key) : undefined), error, backupDir: KEYS_HOME, wallets: ks.list().length,
     gasReserveSol: s.gasReserveSol, gasReserveEth: s.gasReserveEth, route: s.route, mode: s.mode, venue: s.venue,
     demo: true, pending: ks.pending().length, keyError: key ? null : keyError(),
+    // the shared Settings sheet's names (components/settings-sheet.tsx)
+    apiKeyConfigured: !!key, apiKeyPrefix: keyPrefix ?? (key ? maskKey(key) : null), slippage: 0, dir: KEYS_HOME, file: `${KEYS_HOME} (localStorage)`,
   }
 }
 route("GET", /^\/api\/settings$/, async () => ok(await settingsView()))
+/** The shared header's status dot: the API key, the ★ Solana wallet (else the ★ Robinhood one) and the backups. */
+route("GET", /^\/api\/settings\/status$/, async () => {
+  const v = await settingsView()
+  const mains = ks.main()
+  const pick = mains.sol ? { chain: "sol" as ChainId, pk: mains.sol } : mains.rh ? { chain: "rh" as ChainId, pk: mains.rh } : null
+  let funding: { publicKey: string; label: string; sol: number | null; backedUp: boolean } | null = null
+  if (pick) {
+    const w = ks.get(pick.pk, pick.chain)
+    const bal = await balancesFor(api(), [{ chain: pick.chain, address: pick.pk }]).catch(() => null)
+    funding = { publicKey: pick.pk, label: w?.label ?? "main", sol: bal?.get(idOf(pick.chain, pick.pk)) ?? null, backedUp: ks.isBackedUp(pick.pk, pick.chain) }
+  }
+  return ok({
+    api: { configured: v.apiKeySet, connected: v.connected, url: v.apiUrl, keyPrefix: v.keyPrefix, error: v.error?.error, code: v.error?.code },
+    funding, backups: { dir: KEYS_HOME, wallets: v.wallets, pending: v.pending }, keyError: v.keyError,
+  })
+})
+route("PUT", /^\/api\/settings$/, async (req) => {
+  const b = await body<{ apiKey: string | null; createKey: boolean }>(req)
+  if (b.createKey === true) await replaceApiKey(KEY_OPTS)
+  if (b.apiKey !== undefined) setApiKey(KEY_OPTS, typeof b.apiKey === "string" ? b.apiKey : null)
+  return ok(await settingsView())
+})
 route("PATCH", /^\/api\/settings$/, async (req) => {
   const b = await body<{ apiKey: string | null; createKey: boolean; gasReserveSol: number | null; gasReserveEth: number | null; route: string | null; mode: string | null; venue: string | null }>(req)
   if (b.createKey === true) await replaceApiKey(KEY_OPTS) // the API's refusal (rate_limited, …) is thrown verbatim
@@ -272,7 +296,7 @@ route("PATCH", /^\/api\/settings$/, async (req) => {
 route("GET", /^\/api\/transfer\/routes$/, async (req) => {
   const q = new URL(req.url).searchParams
   const from = q.get("from"), to = q.get("to"), amount = Number(q.get("amount"))
-  if (!isChainId(from) || !isChainId(to)) return bad("from and to must be sol, rh, eth or bnb")
+  if (!isChainId(from) || !isChainId(to)) return bad(`from and to must be one of ${CHAIN_IDS.join(", ")}`)
   if (!(amount > 0)) return bad("amount must be greater than zero")
   return ok(await api().transfer.routes(from, to, amount))
 })
@@ -312,6 +336,8 @@ route("GET", /^\/api\/activity$/, async (req) => ok(await activity(api(), ledger
 /** One request → the route's Response (404 for an unknown path, the API's error shape for every failure). */
 export async function handle(req: Request): Promise<Response> {
   const path = new URL(req.url).pathname
+  // a first visit: the visitor's key is still being made; every route waits for it (instant once it exists)
+  await ensureApiKey(KEY_OPTS).catch(() => null)
   for (const [method, pattern, h, failStatus] of routes) {
     if (method !== req.method) continue
     const m = pattern.exec(path)
