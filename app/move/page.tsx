@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowDown, ArrowDownUp, Check, ClipboardPaste, ExternalLink, KeyRound, Loader2, Plus, ShieldCheck, Star, Wallet, X } from "lucide-react"
+import { ArrowDown, ArrowDownUp, Check, ChevronDown, ClipboardPaste, ExternalLink, KeyRound, Loader2, Plus, Star, Wallet, X } from "lucide-react"
 import { get, post, failureOf, walletsChanged } from "@/lib/api"
 import { CHAIN_IDS, CHAINS, looksLikeAddress, type ChainId } from "@/lib/chains"
 import { cn } from "@/lib/cn"
@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
-import { Toggle } from "@/components/ui/toggle"
 import { BrandIcon } from "@/components/ui/brand"
 import { backupAction, toast, toastFailure } from "@/components/ui/toast"
 import { ImportDialog } from "@/components/import-dialog"
@@ -49,8 +48,11 @@ export default function MovePage() {
   const [pasted, setPasted] = useState("")
   const [amount, setAmount] = useState("")
   const [isMax, setIsMax] = useState(false)
-  const [privateHop, setPrivateHop] = useState(false)
-  const [quote, setQuote] = useState<{ q: Quote | null; error?: string; loading: boolean } | null>(null)
+  /** the route the user picked: "direct" | "best" | "private" | an exchange's id; null = the default for the pair */
+  const [choice, setChoice] = useState<string | null>(null)
+  const [routes, setRoutes] = useState<{ rows: Quote[]; error?: string; loading: boolean } | null>(null)
+  const [venues, setVenues] = useState<Array<{ id: string; open: boolean; reason?: string }>>([])
+  const [showVenues, setShowVenues] = useState(false)
   const [job, setJob] = useState<Job | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [importFor, setImportFor] = useState<{ side: "from" | "to"; chain: ChainId } | null>(null)
@@ -104,25 +106,44 @@ export default function MovePage() {
   const toW = walletsOn(toChain).find((w) => w.publicKey.toLowerCase() === toAddress.toLowerCase()) ?? null
   const amt = isMax ? maxAmt : Number(amount)
   const sameChain = fromChain === toChain
-  const route: "direct" | "exchange" = sameChain && !privateHop ? "direct" : "exchange"
+  // direct only exists on the same chain; without a pick: direct there, the best exchange route between chains
+  const pick = choice && !(choice === "direct" && !sameChain) ? choice : sameChain ? "direct" : "best"
+  const route: "direct" | "exchange" = pick === "direct" ? "direct" : "exchange"
 
-  // ── the live quote (exchange routes) ───────────────────────────────────────
+  // ── the exchanges the API lists (open or closed), once ─────────────────────
+  useEffect(() => {
+    void get<{ venues?: Record<string, { status: string; reason?: string }> }>("/api/transfer/venues")
+      .then((r) => setVenues(Object.entries(r.venues ?? {}).map(([id, v]) => ({ id, open: v.status !== "closed", reason: v.reason }))))
+      .catch(() => {})
+  }, [])
+
+  // ── live quotes for every route of this pair and amount ────────────────────
   const qSeq = useRef(0)
   useEffect(() => {
-    if (route !== "exchange" || !(amt > 0)) { setQuote(null); return }
+    if (!(amt > 0)) { setRoutes(null); return }
     const seq = ++qSeq.current
-    setQuote((q) => ({ q: q?.q ?? null, loading: true }))
+    setRoutes((q) => ({ rows: q?.rows ?? [], loading: true }))
     const t = setTimeout(async () => {
       try {
-        const r = await get<{ routes: Quote[]; exchange?: string }>(`/api/transfer/routes?from=${fromChain}&to=${toChain}&amount=${amt}`)
+        const r = await get<{ routes: Quote[]; exchange?: string; note?: string }>(`/api/transfer/routes?from=${fromChain}&to=${toChain}&amount=${amt}`)
         if (seq !== qSeq.current) return
-        const ex = r.routes.filter((x) => x.route === "exchange")
-        const q = ex.find((x) => x.venue === "auto" && x.mode === "float") ?? ex.find((x) => x.venue === "auto") ?? ex[0] ?? null
-        setQuote({ q, loading: false, error: q ? undefined : r.exchange === "off" ? "The exchange route is off right now." : `No exchange route from ${CHAINS[fromChain].name} to ${CHAINS[toChain].name} right now.` })
-      } catch (e) { if (seq === qSeq.current) setQuote({ q: null, loading: false, error: failureOf(e).error }) }
+        const any = r.routes.some((x) => x.route === "exchange")
+        setRoutes({ rows: r.routes, loading: false, error: any ? undefined : r.exchange === "off" ? "The exchange route is off right now." : `No exchange route from ${CHAINS[fromChain].name} to ${CHAINS[toChain].name} right now.` })
+      } catch (e) { if (seq === qSeq.current) setRoutes({ rows: [], loading: false, error: failureOf(e).error }) }
     }, 500)
     return () => clearTimeout(t)
-  }, [route, amt, fromChain, toChain])
+  }, [amt, fromChain, toChain])
+
+  /** The quote of one option: direct · best (the exchange picks) · private · a named exchange. */
+  const quoteOf = (id: string): Quote | null => {
+    const rows = routes?.rows ?? []
+    if (id === "direct") return rows.find((x) => x.route === "direct") ?? null
+    if (id === "best") return rows.find((x) => x.route === "exchange" && x.venue === "auto" && x.mode === "float") ?? null
+    if (id === "private") return rows.find((x) => x.route === "exchange" && x.venue === "auto" && x.mode === "private") ?? null
+    return rows.find((x) => x.route === "exchange" && x.venue === id) ?? null
+  }
+  const q = quoteOf(pick)
+  const venueClosed = (id: string) => quoteOf(id)?.status === "closed" || venues.find((v) => v.id === id)?.open === false
 
   // ── what stops the button ──────────────────────────────────────────────────
   const problem = !data ? "Loading your wallets…"
@@ -131,10 +152,11 @@ export default function MovePage() {
     : !toValid ? (toChain === fromChain && toAddress.toLowerCase() === (fromPk ?? "").toLowerCase() ? "From and To are the same wallet" : `That is not a ${CHAINS[toChain].name} address`)
     : !(amt > 0) ? (isMax ? "Nothing to send: the wallet is empty after the network fee" : "Type an amount")
     : fromBal !== null && amt > maxAmt + 1e-9 ? `More than the wallet holds (${fmt(maxAmt, fromChain)} after the network fee)`
-    : route === "exchange" && quote?.loading ? "Getting a quote…"
-    : route === "exchange" && quote?.error ? quote.error
-    : route === "exchange" && quote?.q?.min !== undefined && amt < quote.q.min ? `The exchange takes at least ${fmt(quote.q.min, fromChain)}`
-    : route === "exchange" && quote?.q?.status === "closed" ? "The exchange route is closed right now: try again in a few minutes"
+    : route === "exchange" && routes?.loading ? "Getting a quote…"
+    : route === "exchange" && routes?.error ? routes.error
+    : route === "exchange" && venueClosed(pick) ? `${venueName(pick)} is closed right now: pick another route`
+    : route === "exchange" && !q ? "That route is not available for this pair: pick another"
+    : route === "exchange" && q?.min !== undefined && amt < q.min ? `This route takes at least ${fmt(q.min, fromChain)}`
     : null
 
   // ── run + follow ───────────────────────────────────────────────────────────
@@ -159,7 +181,7 @@ export default function MovePage() {
         from: [{ chain: fromChain, address: fromW.publicKey, label: fromW.label, ours: true }],
         to: [{ chain: toChain, address: toAddress, label: toW?.label, ours: !!toW }],
         amounts: [isMax ? "max" : amt],
-        route, mode: "float", venue: "auto",
+        route, mode: pick === "private" ? "private" : "float", venue: route === "direct" || pick === "best" || pick === "private" ? "auto" : pick,
       })
       setJob(r.job)
     } catch (e) {
@@ -186,9 +208,12 @@ export default function MovePage() {
     setFromChain(toChain); setFromPk(toPk); setToChain(fc); setToPk(fp); setAmount(""); setIsMax(false)
   }
 
-  const summary = route === "direct"
-    ? { title: "Direct transfer", detail: `Arrives in a few seconds. Only the ${CHAINS[fromChain].name} network fee.` }
-    : { title: "Through an exchange", detail: sameChain ? "The two wallets are not linked on chain: the exchange pays the destination." : `${CHAINS[fromChain].native} on ${CHAINS[fromChain].name} becomes ${CHAINS[toChain].native} on ${CHAINS[toChain].name}.` }
+  const arrives = (id: string) => { const x = quoteOf(id); return x && amt > 0 ? `≈ ${fmt(x.receive, toChain)} · ${eta(x.etaS)}` : routes?.loading ? "…" : "" }
+  const options: Array<{ id: string; title: string; detail: string }> = [
+    ...(sameChain ? [{ id: "direct", title: "Direct", detail: "One transfer, arrives in seconds, no fee. The two wallets are linked on chain." }] : []),
+    { id: "best", title: "Best route", detail: sameChain ? "Through the best open exchange, picked for you. The two wallets are not linked." : `${CHAINS[fromChain].native} on ${CHAINS[fromChain].name} becomes ${CHAINS[toChain].native} on ${CHAINS[toChain].name}, through the best open exchange.` },
+    { id: "private", title: "Private route", detail: "An extra privacy hop on the way. Takes 5 minutes or more and costs a little more." },
+  ]
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
@@ -254,24 +279,20 @@ export default function MovePage() {
       </Card>
 
       {/* ROUTE */}
-      <div className="flex flex-col gap-2 rounded-xl border border-dashed p-3 text-sm">
-        <div className="flex items-start gap-2">
-          <ShieldCheck className="text-brand mt-0.5 size-4 shrink-0" />
-          <div className="flex-1">
-            <div className="font-medium">{summary.title}</div>
-            <div className="text-muted-foreground">{summary.detail}</div>
-          </div>
+      <Card className="gap-2 p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">Route</span>
+          {!(amt > 0) && <span className="text-muted-foreground text-xs">type an amount to see what arrives</span>}
         </div>
-        {route === "exchange" && amt > 0 && (
-          <div className="bg-muted/60 flex items-center justify-between rounded-lg px-3 py-2">
-            <span className="text-muted-foreground">You get about</span>
-            <span className="font-semibold tabular-nums">
-              {quote?.loading ? <Loader2 className="size-4 animate-spin" /> : quote?.q ? `${fmt(quote.q.receive, toChain)} · ${eta(quote.q.etaS)}` : "–"}
-            </span>
-          </div>
-        )}
-        {sameChain && <Toggle checked={privateHop} onChange={setPrivateHop} label={<span className="text-muted-foreground">Don&apos;t link the two wallets (go through an exchange)</span>} />}
-      </div>
+        {options.map((o) => <RouteRow key={o.id} on={pick === o.id} title={o.title} detail={o.detail} right={arrives(o.id)} onPick={() => setChoice(o.id)} />)}
+        <button type="button" onClick={() => setShowVenues((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 px-1 pt-1 text-xs">
+          <ChevronDown className={cn("size-3.5 transition-transform", (showVenues || venues.some((v) => v.id === pick)) && "rotate-180")} />Pick the exchange yourself{venues.length ? ` (${venues.filter((v) => v.open).length} of ${venues.length} open)` : ""}
+        </button>
+        {(showVenues || venues.some((v) => v.id === pick)) && (venues.length ? venues.map((v) => {
+          const closed = venueClosed(v.id)
+          return <RouteRow key={v.id} on={pick === v.id} disabled={closed} title={venueName(v.id)} detail={closed ? "Closed right now." : "The destination is paid from this exchange."} right={closed ? "" : arrives(v.id)} onPick={() => setChoice(v.id)} />
+        }) : <p className="text-muted-foreground px-1 text-xs">The exchange list could not be read right now.</p>)}
+      </Card>
 
       <Button size="lg" className="bg-brand h-12 text-base text-white hover:opacity-90 hover:bg-brand" disabled={!!problem || !!busy || !!running} onClick={() => void move()}>
         {busy === "move" ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -288,7 +309,7 @@ export default function MovePage() {
       }} />
 
       <p className="text-muted-foreground px-1 text-center text-xs">
-        Need many wallets at once (fund ten from one, sweep them back)? That is coming here next. Your moves are on the <Link href="/history" className="underline underline-offset-4">History</Link> page.
+        Your moves are on the <Link href="/history" className="underline underline-offset-4">History</Link> page.
       </p>
     </div>
   )
@@ -345,6 +366,24 @@ function EmptySide({ chain, busy, onMake, onImport, hint }: { chain: ChainId; bu
       </div>
       <span className="text-muted-foreground text-xs">{hint}</span>
     </div>
+  )
+}
+
+const VENUE_NAMES: Record<string, string> = { binance: "Binance", bybit: "Bybit", kucoin: "KuCoin", htx: "HTX", mexc: "MEXC", bitget: "Bitget", gate: "Gate", okx: "OKX" }
+const venueName = (id: string) => VENUE_NAMES[id] ?? (id === "best" ? "The best route" : id === "private" ? "The private route" : id.charAt(0).toUpperCase() + id.slice(1))
+
+/** One route option: a radio row with what it does on the left and what arrives on the right. */
+function RouteRow({ on, title, detail, right, onPick, disabled }: { on: boolean; title: string; detail: string; right: string; onPick: () => void; disabled?: boolean }) {
+  return (
+    <button type="button" onClick={onPick} disabled={disabled}
+      className={cn("flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors", on ? "border-brand bg-brand/5" : "hover:bg-muted border-transparent", disabled && "cursor-not-allowed opacity-50 hover:bg-transparent")}>
+      <span className={cn("flex size-4 shrink-0 items-center justify-center rounded-full border", on && "border-brand bg-brand text-white")}>{on && <Check className="size-3" />}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">{title}</span>
+        <span className="text-muted-foreground block text-xs">{detail}</span>
+      </span>
+      {right && <span className="shrink-0 font-mono text-xs tabular-nums">{right}</span>}
+    </button>
   )
 }
 
